@@ -205,6 +205,38 @@ body {
   min-height: 1.2em;
 }
 
+/* ── Fuzz paths ───────────────────────────────────────────── */
+.fuzz-paths-toggle {
+  margin-top: var(--space-3);
+}
+.fuzz-paths-toggle summary {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--dur);
+}
+.fuzz-paths-toggle summary:hover { color: var(--text-secondary); }
+.fuzz-paths-toggle input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font);
+}
+.fuzz-paths-toggle input:focus {
+  outline: none;
+  border-color: var(--scan-accent);
+}
+.fuzz-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
 /* ── Spinner ───────────────────────────────────────────────── */
 .spinner {
   width: 16px; height: 16px;
@@ -325,15 +357,61 @@ body {
   background: rgba(255,255,255,.12);
 }
 
-/* ── Finding cards ─────────────────────────────────────────── */
-.finding-group { margin-bottom: var(--space-8); }
-.finding-group-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
+/* ── Finding groups (collapsible) ──────────────────────────── */
+.finding-group {
   margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.finding-group-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  list-style: none;
+  user-select: none;
+  transition: background var(--dur);
+}
+.finding-group-title:hover { background: var(--surface-2); }
+.finding-group-title::-webkit-details-marker { display: none; }
+
+.group-chevron {
+  width: 0; height: 0;
+  border-left: 5px solid var(--text-muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--dur);
+  flex-shrink: 0;
+}
+details[open] > .finding-group-title .group-chevron,
+details[open] > .netlog-title .group-chevron {
+  transform: rotate(90deg);
+}
+
+.group-severity-badges {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.group-severity-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9px;
+  color: #fff;
+}
+.group-severity-badge.critical { background: var(--severity-critical); }
+.group-severity-badge.warning { background: var(--severity-warning); }
+.group-severity-badge.info { background: var(--severity-info); }
+.group-severity-badge.pass { background: var(--severity-pass); }
+
+.finding-group-body {
+  padding: var(--space-2) var(--space-4) var(--space-4);
 }
 
 .finding {
@@ -395,6 +473,86 @@ body {
   color: var(--text-muted);
   margin-top: var(--space-1);
 }
+
+/* ── Network log (DevTools-like) ──────────────────────────── */
+.netlog-panel {
+  margin-top: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.netlog-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+  user-select: none;
+  color: var(--text-secondary);
+  transition: background var(--dur);
+}
+.netlog-title:hover { background: var(--surface-2); }
+.netlog-title::-webkit-details-marker { display: none; }
+.netlog-title .tab-count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.netlog-body {
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.netlog-header-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 64px 64px 60px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+}
+.netlog-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 64px 64px 60px;
+  gap: var(--space-2);
+  padding: 2px var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: background var(--dur-fast);
+}
+.netlog-row:hover { background: var(--surface-1); }
+
+.netlog-col-method { color: var(--text-muted); font-weight: 500; }
+.netlog-col-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.netlog-col-status { text-align: right; font-weight: 600; }
+.netlog-col-size { text-align: right; color: var(--text-muted); }
+.netlog-col-time { text-align: right; color: var(--text-muted); }
+
+.netlog-row.net-ok .netlog-col-status { color: var(--severity-pass); }
+.netlog-row.net-redirect .netlog-col-status { color: var(--severity-info); }
+.netlog-row.net-client-err .netlog-col-status { color: var(--severity-warning); }
+.netlog-row.net-server-err .netlog-col-status { color: var(--severity-critical); }
+.netlog-row.net-timeout .netlog-col-status { color: var(--severity-critical); }
 
 /* ── Animations ────────────────────────────────────────────── */
 @keyframes fadeIn {

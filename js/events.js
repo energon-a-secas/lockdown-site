@@ -108,9 +108,15 @@ async function handleScan(state) {
   scanBtnSpinner.hidden = false;
 
   try {
+    // Parse custom fuzz base paths
+    const fuzzInput = document.getElementById('fuzzPaths');
+    const fuzzBasePaths = fuzzInput && fuzzInput.value.trim()
+      ? fuzzInput.value.split(',').map(p => p.trim()).filter(Boolean)
+      : null;
+
     const results = await runScan(url, state._password, (label, pct) => {
       renderProgress(label, pct);
-    });
+    }, fuzzBasePaths);
 
     state.results = results;
     hideProgress();

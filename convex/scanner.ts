@@ -15,6 +15,26 @@ function requireAuth(password: string) {
   if (!checkPassword(password)) throw new Error("Unauthorized");
 }
 
+// ── Request log ─────────────────────────────────────────────
+
+interface RequestLog {
+  method: string;
+  url: string;
+  status: number | null;
+  duration: number;
+  size: number | null;
+}
+
+const requestLog: RequestLog[] = [];
+
+function resetLog() {
+  requestLog.length = 0;
+}
+
+function collectLog(): RequestLog[] {
+  return [...requestLog];
+}
+
 // ── HTTP helpers ────────────────────────────────────────────
 
 interface FetchResult {
@@ -22,9 +42,12 @@ interface FetchResult {
   headers: Record<string, string>;
   body: string;
   ok: boolean;
+  size: number;
 }
 
 async function safeFetch(url: string, options?: RequestInit): Promise<FetchResult | null> {
+  const method = (options?.method || "GET").toUpperCase();
+  const start = Date.now();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
@@ -41,14 +64,17 @@ async function safeFetch(url: string, options?: RequestInit): Promise<FetchResul
     const body = await res.text();
     const headers: Record<string, string> = {};
     res.headers.forEach((val, key) => { headers[key.toLowerCase()] = val; });
-    return { status: res.status, headers, body, ok: res.ok };
+    const duration = Date.now() - start;
+    requestLog.push({ method, url, status: res.status, duration, size: body.length });
+    return { status: res.status, headers, body, ok: res.ok, size: body.length };
   } catch {
+    const duration = Date.now() - start;
+    requestLog.push({ method, url, status: null, duration, size: null });
     return null;
   }
 }
 
 async function headFetch(url: string): Promise<FetchResult | null> {
-  // Try HEAD first, fall back to GET if HEAD is blocked
   let res = await safeFetch(url, { method: "HEAD" });
   if (!res || res.status === 405) {
     res = await safeFetch(url, { method: "GET" });
@@ -66,6 +92,11 @@ interface Finding {
   hardening?: string;
 }
 
+interface ScanResult {
+  findings: Finding[];
+  requests: RequestLog[];
+}
+
 // ── Verify password action ──────────────────────────────────
 
 export const verifyPassword = action({
@@ -77,44 +108,64 @@ export const verifyPassword = action({
 
 // ── Probe exposed files ─────────────────────────────────────
 
-const SENSITIVE_FILES = [
-  { path: "/.env", label: ".env (environment variables)", critical: true },
-  { path: "/.env.local", label: ".env.local (local env)", critical: true },
-  { path: "/.env.production", label: ".env.production", critical: true },
-  { path: "/.git/config", label: ".git/config (repository config)", critical: true },
-  { path: "/.git/HEAD", label: ".git/HEAD (git metadata)", critical: true },
-  { path: "/.DS_Store", label: ".DS_Store (macOS metadata)", critical: false },
-  { path: "/wp-admin/", label: "WordPress admin panel", critical: false },
-  { path: "/wp-login.php", label: "WordPress login page", critical: false },
-  { path: "/phpinfo.php", label: "PHP info page", critical: true },
-  { path: "/server-status", label: "Apache server status", critical: true },
-  { path: "/server-info", label: "Apache server info", critical: true },
-  { path: "/.htaccess", label: ".htaccess (Apache config)", critical: false },
-  { path: "/.htpasswd", label: ".htpasswd (Apache passwords)", critical: true },
-  { path: "/backup.sql", label: "SQL backup file", critical: true },
-  { path: "/dump.sql", label: "SQL dump file", critical: true },
-  { path: "/database.sql", label: "Database file", critical: true },
-  { path: "/config.php", label: "PHP config file", critical: true },
-  { path: "/config.yml", label: "YAML config file", critical: false },
-  { path: "/config.json", label: "JSON config file", critical: false },
-  { path: "/composer.json", label: "Composer dependencies", critical: false },
-  { path: "/package.json", label: "Node.js package manifest", critical: false },
-  { path: "/.npmrc", label: ".npmrc (npm config, may contain tokens)", critical: true },
-  { path: "/Dockerfile", label: "Dockerfile", critical: false },
-  { path: "/docker-compose.yml", label: "Docker Compose config", critical: false },
-  { path: "/.dockerenv", label: ".dockerenv (container marker)", critical: false },
-  { path: "/crossdomain.xml", label: "Flash crossdomain policy", critical: false },
-  { path: "/elmah.axd", label: "ELMAH error log (.NET)", critical: true },
-  { path: "/web.config", label: "IIS web.config", critical: false },
-  { path: "/debug/", label: "Debug endpoint", critical: true },
-  { path: "/trace", label: "Trace endpoint", critical: true },
-  { path: "/_debug", label: "Debug endpoint", critical: true },
+// Three tiers:
+//   critical — secrets, credentials, database dumps (should NEVER be public)
+//   warning  — config/metadata that leaks details (risky but not secrets)
+//   info     — manifests/build files (expected in some setups, worth noting)
+
+const SENSITIVE_FILES: { path: string; label: string; tier: "critical" | "warning" | "info" }[] = [
+  // Critical — secrets & credentials
+  { path: "/.env", label: ".env (environment variables)", tier: "critical" },
+  { path: "/.env.local", label: ".env.local (local env)", tier: "critical" },
+  { path: "/.env.production", label: ".env.production", tier: "critical" },
+  { path: "/.git/config", label: ".git/config (repository config)", tier: "critical" },
+  { path: "/.git/HEAD", label: ".git/HEAD (git metadata)", tier: "critical" },
+  { path: "/.htpasswd", label: ".htpasswd (Apache passwords)", tier: "critical" },
+  { path: "/.npmrc", label: ".npmrc (npm config, may contain tokens)", tier: "critical" },
+  { path: "/phpinfo.php", label: "PHP info page", tier: "critical" },
+  { path: "/server-status", label: "Apache server status", tier: "critical" },
+  { path: "/server-info", label: "Apache server info", tier: "critical" },
+  { path: "/backup.sql", label: "SQL backup file", tier: "critical" },
+  { path: "/dump.sql", label: "SQL dump file", tier: "critical" },
+  { path: "/database.sql", label: "Database file", tier: "critical" },
+  { path: "/config.php", label: "PHP config file", tier: "critical" },
+  { path: "/elmah.axd", label: "ELMAH error log (.NET)", tier: "critical" },
+  { path: "/debug/", label: "Debug endpoint", tier: "critical" },
+  { path: "/trace", label: "Trace endpoint", tier: "critical" },
+  { path: "/_debug", label: "Debug endpoint", tier: "critical" },
+
+  // Warning — config & metadata leakage
+  { path: "/.DS_Store", label: ".DS_Store (macOS metadata)", tier: "warning" },
+  { path: "/.htaccess", label: ".htaccess (Apache config)", tier: "warning" },
+  { path: "/config.yml", label: "YAML config file", tier: "warning" },
+  { path: "/config.json", label: "JSON config file", tier: "warning" },
+  { path: "/web.config", label: "IIS web.config", tier: "warning" },
+  { path: "/wp-admin/", label: "WordPress admin panel", tier: "warning" },
+  { path: "/wp-login.php", label: "WordPress login page", tier: "warning" },
+  { path: "/crossdomain.xml", label: "Flash crossdomain policy", tier: "warning" },
+
+  // Info — manifests & build artifacts (common in public repos, not secrets)
+  { path: "/package.json", label: "Node.js package manifest", tier: "info" },
+  { path: "/composer.json", label: "Composer dependencies", tier: "info" },
+  { path: "/Dockerfile", label: "Dockerfile", tier: "info" },
+  { path: "/docker-compose.yml", label: "Docker Compose config", tier: "info" },
+  { path: "/.dockerenv", label: ".dockerenv (container marker)", tier: "info" },
 ];
+
+const TIER_HARDENING = {
+  critical: (path: string) =>
+    `Block access to ${path} immediately. This file can expose secrets, credentials, or sensitive data. Remove it from the public directory or deny access in your web server config.`,
+  warning: (path: string) =>
+    `Consider blocking ${path} from public access. It leaks implementation details that help attackers map your infrastructure.`,
+  info: (path: string) =>
+    `${path} is publicly visible. While not a secret, it reveals your tech stack. Consider whether this exposure is intentional.`,
+};
 
 export const probeFiles = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
 
     const checks = SENSITIVE_FILES.map(async (file) => {
@@ -122,13 +173,11 @@ export const probeFiles = action({
       const res = await headFetch(url);
       if (res && res.ok && res.status === 200) {
         findings.push({
-          severity: file.critical ? "critical" : "warning",
+          severity: file.tier,
           title: `${file.label} is publicly accessible`,
           endpoint: file.path,
-          detail: `Returned HTTP ${res.status}. This file should not be publicly reachable.`,
-          hardening: file.critical
-            ? `Block access to ${file.path} in your web server config or .htaccess. If using a CDN/hosting platform, add a deny rule. Remove the file from the public directory if not needed.`
-            : `Consider blocking ${file.path} from public access. While not always critical, it can leak implementation details useful to attackers.`,
+          detail: `HTTP ${res.status} — ${file.tier === "info" ? "discoverable file" : "should not be publicly reachable"}`,
+          hardening: TIER_HARDENING[file.tier](file.path),
         });
       }
     });
@@ -139,11 +188,11 @@ export const probeFiles = action({
       findings.push({
         severity: "pass",
         title: "No common sensitive files found exposed",
-        detail: `Checked ${SENSITIVE_FILES.length} common file paths. None returned HTTP 200.`,
+        detail: `Checked ${SENSITIVE_FILES.length} paths. None returned HTTP 200.`,
       });
     }
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });
 
@@ -189,8 +238,9 @@ const REQUIRED_HEADERS: { name: string; label: string; hardening: string }[] = [
 
 export const checkHeaders = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
 
     const res = await safeFetch(targetUrl);
@@ -200,10 +250,9 @@ export const checkHeaders = action({
         title: "Could not reach the target URL",
         detail: "The server did not respond within 8 seconds.",
       });
-      return findings;
+      return { findings, requests: collectLog() };
     }
 
-    // Check HTTPS
     if (targetUrl.startsWith("http://")) {
       findings.push({
         severity: "critical",
@@ -237,7 +286,7 @@ export const checkHeaders = action({
       }
     }
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });
 
@@ -245,11 +294,11 @@ export const checkHeaders = action({
 
 export const checkRobots = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
 
-    // robots.txt
     const robotsRes = await safeFetch(targetUrl + "/robots.txt");
     if (!robotsRes || robotsRes.status !== 200) {
       findings.push({
@@ -267,7 +316,6 @@ export const checkRobots = action({
         detail: `${robotsRes.body.length} bytes`,
       });
 
-      // Check for overly permissive or dangerous patterns
       const body = robotsRes.body.toLowerCase();
       if (body.includes("disallow:") && body.includes("/api")) {
         findings.push({
@@ -276,22 +324,18 @@ export const checkRobots = action({
           detail: "This hides API routes from search engines but does not block direct access. Ensure API authentication is in place.",
         });
       }
-      if (body.includes("disallow: /") && !body.includes("disallow: / ")) {
-        // "Disallow: /" blocks everything
-        const lines = robotsRes.body.split("\n");
-        const blockAll = lines.some(l => /^disallow:\s*\/\s*$/i.test(l.trim()));
-        if (blockAll) {
-          findings.push({
-            severity: "warning",
-            title: "robots.txt blocks all crawlers",
-            detail: "Disallow: / prevents all search engines from indexing your site.",
-            hardening: "If this is intentional (staging site), add a noindex meta tag too. For production sites, specify only sensitive paths in Disallow.",
-          });
-        }
+      const lines = robotsRes.body.split("\n");
+      const blockAll = lines.some(l => /^disallow:\s*\/\s*$/i.test(l.trim()));
+      if (blockAll) {
+        findings.push({
+          severity: "warning",
+          title: "robots.txt blocks all crawlers",
+          detail: "Disallow: / prevents all search engines from indexing your site.",
+          hardening: "If this is intentional (staging site), add a noindex meta tag too. For production sites, specify only sensitive paths in Disallow.",
+        });
       }
     }
 
-    // sitemap.xml
     const sitemapRes = await safeFetch(targetUrl + "/sitemap.xml");
     if (!sitemapRes || sitemapRes.status !== 200) {
       findings.push({
@@ -310,7 +354,7 @@ export const checkRobots = action({
       });
     }
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });
 
@@ -318,16 +362,16 @@ export const checkRobots = action({
 
 export const checkSeo = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
 
     const res = await safeFetch(targetUrl);
-    if (!res) return findings;
+    if (!res) return { findings, requests: collectLog() };
 
     const html = res.body;
 
-    // Title tag
     const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
     if (!titleMatch || !titleMatch[1].trim()) {
       findings.push({
@@ -344,7 +388,6 @@ export const checkSeo = action({
       });
     }
 
-    // Meta description
     const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
     if (!descMatch || !descMatch[1].trim()) {
@@ -362,7 +405,6 @@ export const checkSeo = action({
       });
     }
 
-    // Open Graph
     const hasOgTitle = /<meta[^>]+property=["']og:title["']/i.test(html);
     const hasOgDesc = /<meta[^>]+property=["']og:description["']/i.test(html);
     const hasOgImage = /<meta[^>]+property=["']og:image["']/i.test(html);
@@ -386,28 +428,25 @@ export const checkSeo = action({
       });
     }
 
-    // Viewport
     const hasViewport = /<meta[^>]+name=["']viewport["']/i.test(html);
     findings.push(hasViewport
       ? { severity: "pass", title: "Viewport meta tag present" }
       : { severity: "warning", title: "Missing viewport meta tag", hardening: "Add <meta name='viewport' content='width=device-width, initial-scale=1.0'> for mobile responsiveness." }
     );
 
-    // Canonical
     const hasCanonical = /<link[^>]+rel=["']canonical["']/i.test(html);
     findings.push(hasCanonical
       ? { severity: "pass", title: "Canonical URL set" }
       : { severity: "info", title: "No canonical URL", hardening: "Add <link rel='canonical' href='https://yoursite.com/'> to prevent duplicate content issues." }
     );
 
-    // Favicon
     const hasFavicon = /<link[^>]+rel=["'](?:icon|shortcut icon)["']/i.test(html);
     findings.push(hasFavicon
       ? { severity: "pass", title: "Favicon linked" }
       : { severity: "info", title: "No favicon link tag", hardening: "Add <link rel='icon' href='/favicon.ico'> so browsers show your icon in tabs." }
     );
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });
 
@@ -442,8 +481,9 @@ const API_PATHS = [
 
 export const probeEndpoints = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
     const discovered: string[] = [];
 
@@ -459,7 +499,7 @@ export const probeEndpoints = action({
           severity: isCritical ? "critical" : "warning",
           title: `${ep.label} is publicly accessible`,
           endpoint: ep.path,
-          detail: `Returned HTTP ${res.status}. This endpoint may expose internal information or allow unauthorized actions.`,
+          detail: `HTTP ${res.status}. This endpoint may expose internal information or allow unauthorized actions.`,
           hardening: isCritical
             ? `This endpoint exposes sensitive internal data. Block it immediately with firewall rules, authentication middleware, or remove it from production.`
             : `If this endpoint is intentional, ensure it requires authentication. If not needed publicly, block it via reverse proxy rules or remove it. Consider IP allowlisting for internal endpoints.`,
@@ -476,7 +516,6 @@ export const probeEndpoints = action({
         detail: `Probed ${API_PATHS.length} common paths. None returned HTTP 200.`,
       });
     } else {
-      // Add a summary finding at the beginning
       findings.unshift({
         severity: "info",
         title: `${discovered.length} endpoint(s) discovered`,
@@ -485,7 +524,7 @@ export const probeEndpoints = action({
       });
     }
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });
 
@@ -493,14 +532,14 @@ export const probeEndpoints = action({
 
 export const checkLeakage = action({
   args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<Finding[]> => {
+  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
     requireAuth(password);
+    resetLog();
     const findings: Finding[] = [];
 
     const res = await safeFetch(targetUrl);
-    if (!res) return findings;
+    if (!res) return { findings, requests: collectLog() };
 
-    // Server header
     const server = res.headers["server"];
     if (server) {
       const hasVersion = /\/[\d.]+/.test(server);
@@ -515,13 +554,9 @@ export const checkLeakage = action({
           : "Consider removing the Server header entirely to reduce fingerprinting surface.",
       });
     } else {
-      findings.push({
-        severity: "pass",
-        title: "Server header not disclosed",
-      });
+      findings.push({ severity: "pass", title: "Server header not disclosed" });
     }
 
-    // X-Powered-By
     const poweredBy = res.headers["x-powered-by"];
     if (poweredBy) {
       findings.push({
@@ -531,13 +566,9 @@ export const checkLeakage = action({
         hardening: "Remove the X-Powered-By header. In Express: app.disable('x-powered-by'); In PHP: expose_php = Off in php.ini",
       });
     } else {
-      findings.push({
-        severity: "pass",
-        title: "X-Powered-By header not disclosed",
-      });
+      findings.push({ severity: "pass", title: "X-Powered-By header not disclosed" });
     }
 
-    // Check for debug/error info in HTML
     const html = res.body.toLowerCase();
     const debugPatterns = [
       { pattern: "stack trace", label: "Stack trace detected in page" },
@@ -558,7 +589,6 @@ export const checkLeakage = action({
       }
     }
 
-    // Check for common tokens/secrets patterns in HTML (very basic)
     const secretPatterns = [
       { pattern: /sk[-_]live[-_][a-zA-Z0-9]{20,}/i, label: "Possible Stripe live secret key in page source" },
       { pattern: /AKIA[A-Z0-9]{16}/i, label: "Possible AWS access key in page source" },
@@ -577,12 +607,146 @@ export const checkLeakage = action({
     }
 
     if (findings.every(f => f.severity === "pass")) {
+      findings.push({ severity: "pass", title: "No obvious information leakage detected" });
+    }
+
+    return { findings, requests: collectLog() };
+  },
+});
+
+// ── Endpoint fuzzer ─────────────────────────────────────────
+
+const COMMON_RESOURCES = [
+  "users", "user", "me", "profile", "accounts", "account",
+  "admin", "admins", "roles", "permissions",
+  "stats", "analytics", "metrics", "dashboard",
+  "config", "settings", "env", "environment",
+  "logs", "log", "events", "audit",
+  "tokens", "sessions", "keys", "secrets",
+  "files", "uploads", "images", "media",
+  "orders", "payments", "invoices", "billing",
+  "notifications", "messages", "emails",
+  "search", "export", "import", "download", "backup",
+  "debug", "test", "internal", "private", "hidden",
+  "version", "info", "health", "status", "ping",
+];
+
+const COMMON_QUERY_PROBES = [
+  "?page=1", "?limit=100", "?debug=true", "?verbose=1",
+  "?format=json", "?include=all", "?admin=true",
+  "?id=1", "?user=admin", "?role=admin",
+];
+
+const SENSITIVE_KEYWORDS = [
+  "password", "secret", "token", "key", "credential",
+  "auth", "session", "admin", "root", "debug",
+  "internal", "private", "config", "database", "sql",
+];
+
+export const fuzzEndpoints = action({
+  args: {
+    targetUrl: v.string(),
+    password: v.string(),
+    basePaths: v.array(v.string()),
+  },
+  handler: async (_, { targetUrl, password, basePaths }): Promise<ScanResult> => {
+    requireAuth(password);
+    resetLog();
+    const findings: Finding[] = [];
+    const base = targetUrl.replace(/\/+$/, "");
+
+    // Collect all URLs to probe
+    const urlsToProbe: string[] = [];
+    for (const bp of basePaths) {
+      for (const resource of COMMON_RESOURCES) {
+        urlsToProbe.push(`${base}${bp}/${resource}`);
+      }
+    }
+
+    // Also try query parameter probes on base paths
+    for (const bp of basePaths) {
+      for (const qp of COMMON_QUERY_PROBES) {
+        urlsToProbe.push(`${base}${bp}${qp}`);
+      }
+    }
+
+    // Batch requests (10 at a time)
+    const BATCH_SIZE = 10;
+    const discovered: { url: string; status: number; size: number | null; hasBody: boolean; hasSensitive: boolean }[] = [];
+
+    for (let i = 0; i < urlsToProbe.length; i += BATCH_SIZE) {
+      const batch = urlsToProbe.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (url) => {
+          const res = await safeFetch(url, { method: "GET", redirect: "follow" });
+          if (!res) return null;
+          const bodyText = res.body.substring(0, 2000);
+          const hasSensitive = SENSITIVE_KEYWORDS.some(kw =>
+            bodyText.toLowerCase().includes(kw)
+          );
+          return {
+            url,
+            status: res.status,
+            size: res.size,
+            hasBody: bodyText.length > 0 && !bodyText.includes("<!DOCTYPE") && !bodyText.includes("<html"),
+            hasSensitive,
+          };
+        })
+      );
+
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) {
+          const v = r.value;
+          // Only report endpoints that responded with success or interesting codes
+          if (v.status >= 200 && v.status < 300) {
+            discovered.push(v);
+          } else if (v.status === 401 || v.status === 403) {
+            // Protected but exists — noteworthy
+            discovered.push(v);
+          }
+        }
+      }
+    }
+
+    // Generate findings from discovered endpoints
+    for (const d of discovered) {
+      const shortUrl = d.url.replace(base, "");
+
+      if (d.hasSensitive && d.status >= 200 && d.status < 300) {
+        findings.push({
+          severity: "critical",
+          title: `Sensitive data exposed at ${shortUrl}`,
+          endpoint: d.url,
+          detail: `Returned ${d.status} with content containing sensitive keywords (password, token, key, etc.). An attacker could extract credentials or internal data.`,
+          hardening: "Require authentication for all sensitive endpoints. Never expose credentials, tokens, or internal configuration via unauthenticated API routes.",
+        });
+      } else if (d.status >= 200 && d.status < 300 && d.hasBody) {
+        findings.push({
+          severity: "warning",
+          title: `Discoverable endpoint: ${shortUrl}`,
+          endpoint: d.url,
+          detail: `Returned ${d.status} with a non-HTML response body (${d.size !== null ? d.size + " bytes" : "unknown size"}). This endpoint is publicly accessible and could leak data.`,
+          hardening: "Restrict API endpoints with authentication. If public by design, ensure no sensitive data is returned. Consider rate limiting.",
+        });
+      } else if (d.status === 401 || d.status === 403) {
+        findings.push({
+          severity: "info",
+          title: `Protected endpoint exists: ${shortUrl}`,
+          endpoint: d.url,
+          detail: `Returned ${d.status} (${d.status === 401 ? "Unauthorized" : "Forbidden"}). The endpoint exists but requires credentials. An attacker now knows this path exists.`,
+          hardening: "Return 404 instead of 401/403 for sensitive endpoints to avoid path enumeration. Or use a WAF to block scanning attempts.",
+        });
+      }
+    }
+
+    if (!findings.length) {
       findings.push({
         severity: "pass",
-        title: "No obvious information leakage detected",
+        title: "No additional endpoints discovered via fuzzing",
+        detail: `Tested ${urlsToProbe.length} URL combinations across ${basePaths.length} base paths. No accessible or sensitive endpoints found.`,
       });
     }
 
-    return findings;
+    return { findings, requests: collectLog() };
   },
 });

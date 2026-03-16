@@ -3,16 +3,14 @@
 
 let client = null;
 let ConvexHttpClient = null;
-let api = null;
 
-const CONVEX_URL = ''; // Set after `npx convex dev` or deploy
+const CONVEX_URL = 'https://dutiful-elephant-373.convex.cloud';
 
 export async function initConvex() {
   if (client) return;
   try {
     const mod = await import('https://esm.sh/convex@1.21.0/browser');
     ConvexHttpClient = mod.ConvexHttpClient;
-    // We'll use action calls with the URL set in the convex deployment
     if (CONVEX_URL) {
       client = new ConvexHttpClient(CONVEX_URL);
     }
@@ -31,40 +29,39 @@ export async function verifyPassword(password) {
   return await c.action('scanner:verifyPassword', { password });
 }
 
-export async function runScan(targetUrl, password, onProgress) {
+export async function runScan(targetUrl, password, onProgress, fuzzBasePaths) {
   const c = getClient();
+  const allRequests = [];
 
-  // Run probe scan (exposed files, endpoints)
-  onProgress('Probing exposed files...', 10);
-  const fileResults = await c.action('scanner:probeFiles', { targetUrl, password });
+  async function runAction(name, label, pct) {
+    onProgress(label, pct);
+    const result = await c.action(`scanner:${name}`, { targetUrl, password });
+    if (result.requests) allRequests.push(...result.requests);
+    return result.findings;
+  }
 
-  onProgress('Checking security headers...', 30);
-  const headerResults = await c.action('scanner:checkHeaders', { targetUrl, password });
+  const files = await runAction('probeFiles', 'Probing exposed files...', 8);
+  const headers = await runAction('checkHeaders', 'Checking security headers...', 22);
+  const robots = await runAction('checkRobots', 'Analyzing robots.txt and sitemap...', 36);
+  const seo = await runAction('checkSeo', 'Scanning for SEO basics...', 50);
+  const endpoints = await runAction('probeEndpoints', 'Discovering API endpoints...', 64);
+  const leakage = await runAction('checkLeakage', 'Checking information leakage...', 78);
 
-  onProgress('Analyzing robots.txt and sitemap...', 50);
-  const robotsResults = await c.action('scanner:checkRobots', { targetUrl, password });
-
-  onProgress('Scanning for SEO basics...', 65);
-  const seoResults = await c.action('scanner:checkSeo', { targetUrl, password });
-
-  onProgress('Discovering API endpoints...', 80);
-  const apiResults = await c.action('scanner:probeEndpoints', { targetUrl, password });
-
-  onProgress('Checking information leakage...', 90);
-  const leakResults = await c.action('scanner:checkLeakage', { targetUrl, password });
+  // Endpoint fuzzing
+  const paths = fuzzBasePaths && fuzzBasePaths.length ? fuzzBasePaths : ['/api', '/api/v1', '/api/v2'];
+  onProgress(`Fuzzing ${paths.length} base paths...`, 88);
+  const fuzzResult = await c.action('scanner:fuzzEndpoints', {
+    targetUrl, password, basePaths: paths,
+  });
+  if (fuzzResult.requests) allRequests.push(...fuzzResult.requests);
+  const fuzz = fuzzResult.findings;
 
   onProgress('Compiling report...', 100);
 
   return {
     url: targetUrl,
     timestamp: new Date().toISOString(),
-    categories: {
-      files: fileResults,
-      headers: headerResults,
-      robots: robotsResults,
-      seo: seoResults,
-      endpoints: apiResults,
-      leakage: leakResults,
-    },
+    categories: { files, headers, robots, seo, endpoints, fuzz, leakage },
+    requests: allRequests,
   };
 }

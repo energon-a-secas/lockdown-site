@@ -8,11 +8,11 @@ const CATEGORY_META = {
   robots:    { label: 'Robots & Sitemap',    icon: '&#129302;' },
   seo:       { label: 'SEO Basics',          icon: '&#128269;' },
   endpoints: { label: 'API Endpoints',       icon: '&#128268;' },
+  fuzz:      { label: 'Endpoint Fuzzing',    icon: '&#128270;' },
   leakage:   { label: 'Info Leakage',        icon: '&#128065;' },
 };
 
 export function render(state) {
-  // Gate vs scanner visibility
   const gateCard = document.getElementById('gateCard');
   const scannerView = document.getElementById('scannerView');
   if (gateCard) gateCard.hidden = state.authenticated;
@@ -54,11 +54,9 @@ export function renderResults(results, activeCategory) {
 
   document.getElementById('resultsUrl').textContent = results.url;
 
-  // Tabs
   renderTabs(results, activeCategory);
-
-  // Findings
   renderFindings(results, activeCategory);
+  renderNetworkLog(results.requests || []);
 }
 
 function renderTabs(results, activeCategory) {
@@ -91,8 +89,23 @@ function renderFindings(results, activeCategory) {
   for (const [key, findings] of categoriesToShow) {
     if (!findings.length) continue;
     const meta = CATEGORY_META[key] || { label: key, icon: '' };
-    html += `<div class="finding-group">
-      <div class="finding-group-title">${meta.icon} ${escHtml(meta.label)}</div>`;
+
+    // Count severities for the group header
+    const counts = { critical: 0, warning: 0, info: 0, pass: 0 };
+    for (const f of findings) counts[f.severity]++;
+
+    const countBadges = Object.entries(counts)
+      .filter(([, n]) => n > 0)
+      .map(([sev, n]) => `<span class="group-severity-badge ${sev}">${n}</span>`)
+      .join('');
+
+    html += `<details class="finding-group" open>
+      <summary class="finding-group-title">
+        <span class="group-chevron"></span>
+        ${meta.icon} ${escHtml(meta.label)}
+        <span class="group-severity-badges">${countBadges}</span>
+      </summary>
+      <div class="finding-group-body">`;
 
     for (const f of findings) {
       html += `<div class="finding severity-${f.severity}">
@@ -114,12 +127,61 @@ function renderFindings(results, activeCategory) {
       html += `</div>`;
     }
 
-    html += `</div>`;
+    html += `</div></details>`;
   }
 
   if (!html) {
     html = '<p style="color:var(--text-muted)">No findings for this category.</p>';
   }
 
+  container.innerHTML = html;
+}
+
+function renderNetworkLog(requests) {
+  const container = document.getElementById('networkLog');
+  if (!container || !requests.length) return;
+
+  const statusColor = (s) => {
+    if (s === null) return 'net-timeout';
+    if (s >= 200 && s < 300) return 'net-ok';
+    if (s >= 300 && s < 400) return 'net-redirect';
+    if (s >= 400 && s < 500) return 'net-client-err';
+    return 'net-server-err';
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes === null) return '-';
+    if (bytes < 1024) return bytes + ' B';
+    return (bytes / 1024).toFixed(1) + ' KB';
+  };
+
+  let html = `<details class="netlog-panel">
+    <summary class="netlog-title">
+      <span class="group-chevron"></span>
+      Network Log
+      <span class="tab-count">${requests.length} requests</span>
+    </summary>
+    <div class="netlog-body">
+      <div class="netlog-header-row">
+        <span class="netlog-col-method">Method</span>
+        <span class="netlog-col-url">URL</span>
+        <span class="netlog-col-status">Status</span>
+        <span class="netlog-col-size">Size</span>
+        <span class="netlog-col-time">Time</span>
+      </div>`;
+
+  for (const req of requests) {
+    const cls = statusColor(req.status);
+    const shortUrl = req.url.length > 70 ? req.url.substring(0, 67) + '...' : req.url;
+    html += `<div class="netlog-row ${cls}">
+      <span class="netlog-col-method">${req.method}</span>
+      <span class="netlog-col-url" title="${escHtml(req.url)}">${escHtml(shortUrl)}</span>
+      <span class="netlog-col-status">${req.status ?? 'TIMEOUT'}</span>
+      <span class="netlog-col-size">${formatSize(req.size)}</span>
+      <span class="netlog-col-time">${req.duration}ms</span>
+    </div>`;
+  }
+
+  html += `</div></details>`;
   container.innerHTML = html;
 }

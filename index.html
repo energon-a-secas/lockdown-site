@@ -90,6 +90,12 @@
             </button>
           </div>
           <div class="scan-error" id="scanError"></div>
+          <details class="fuzz-paths-toggle">
+            <summary>Custom fuzz paths (optional)</summary>
+            <label class="input-label" for="fuzzPaths" style="margin-top:var(--space-3)">Base paths to fuzz</label>
+            <input type="text" id="fuzzPaths" placeholder="/api, /api/v1, /api/v2, /graphql" autocomplete="off">
+            <p class="fuzz-hint">Comma-separated base paths. Defaults to /api, /api/v1, /api/v2 if empty.</p>
+          </details>
         </div>
 
         <!-- Progress -->
@@ -115,6 +121,7 @@
 
           <div class="category-tabs" id="categoryTabs"></div>
           <div id="findingsContainer"></div>
+          <div id="networkLog"></div>
         </div>
 
       </div>

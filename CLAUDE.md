@@ -24,6 +24,7 @@ Standard modular layout: `index.html` shell + `css/style.css` + `js/*.js`. Backe
 - `checkRobots` — analyzes robots.txt and sitemap.xml presence and configuration
 - `checkSeo` — checks title, meta description, OG tags, viewport, canonical, favicon
 - `probeEndpoints` — tests 24 common API/admin paths (/api, /graphql, /swagger, /admin, /metrics, etc.)
+- `fuzzEndpoints` — brute-forces common resource names and query params under user-specified base paths (default /api, /api/v1, /api/v2)
 - `checkLeakage` — inspects server headers, X-Powered-By, debug info, and secret patterns in HTML
 
 **Finding model:** Each finding has `severity` (critical/warning/info/pass), `title`, optional `detail`, optional `endpoint`, and optional `hardening` recommendation.
