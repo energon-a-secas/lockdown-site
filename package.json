@@ -1,0 +1,9 @@
+{
+  "name": "lockdown-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Site security scanner with Convex backend",
+  "dependencies": {
+    "convex": "^1.21.0"
+  }
+}

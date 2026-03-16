@@ -1,0 +1,44 @@
+---
+config:
+  theme: base
+  themeVariables:
+    primaryColor: "#0f172a"
+    primaryTextColor: "#e2e8f0"
+    primaryBorderColor: "#0063e5"
+    lineColor: "#38bdf8"
+    secondaryColor: "#1e293b"
+    tertiaryColor: "#1e293b"
+    clusterBkg: "#f0f7ff"
+    clusterBorder: "#bfdbfe"
+    edgeLabelBackground: "#e8f0ff"
+    mainBkg: "#0f172a"
+    nodeBorder: "#0063e5"
+    titleColor: "#1e1b4b"
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif"
+    fontSize: "13px"
+---
+flowchart TB
+    User([User]) --> Gate["Password Gate"]
+    Gate -->|"verified"| HTML["index.html\nApp shell"]
+
+    subgraph Frontend["Frontend (ES Modules)"]
+        HTML --> app["app.js\nEntry point"]
+        app --> state["state.js\nEphemeral state"]
+        app --> render["render.js\nResults + progress"]
+        app --> events["events.js\nGate, scan, download"]
+        app --> data["data.js\nConvex client"]
+        app --> report["report.js\nMarkdown generator"]
+        app --> utils["utils.js\nHelpers"]
+    end
+
+    subgraph Convex["Convex Backend"]
+        data -->|"actions"| scanner["scanner.ts\n6 scan actions"]
+        scanner -->|"probeFiles"| Target["Target Website"]
+        scanner -->|"checkHeaders"| Target
+        scanner -->|"checkRobots"| Target
+        scanner -->|"checkSeo"| Target
+        scanner -->|"probeEndpoints"| Target
+        scanner -->|"checkLeakage"| Target
+    end
+
+    report -->|"download"| MD["lockdown-report.md"]
