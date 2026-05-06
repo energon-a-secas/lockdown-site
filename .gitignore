@@ -1,6 +1,22 @@
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
+
+# ── Playwright MCP (Claude Code browser automation — screenshots, logs) ───────
 .playwright-mcp/
+
+# ── Playwright test artifacts ─────────────────────────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+
+# ── Node ──────────────────────────────────────────────────────────────────────
 node_modules/
 npm-debug.log*
+package-lock.json
+
+# ── Convex generated files ────────────────────────────────────────────────────
+convex/_generated/
+
+# ── Secrets — never commit ────────────────────────────────────────────────────
 .env
 .env.*
