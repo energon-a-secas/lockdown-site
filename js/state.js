@@ -2,7 +2,6 @@
 // Ephemeral state only. No localStorage persistence.
 
 export const state = {
-  authenticated: false,
   scanning: false,
   targetUrl: '',
   progress: 0,

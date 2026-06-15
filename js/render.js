@@ -12,11 +12,9 @@ const CATEGORY_META = {
   leakage:   { label: 'Info Leakage',        icon: '&#128065;' },
 };
 
-export function render(state) {
-  const gateCard = document.getElementById('gateCard');
+export function render() {
   const scannerView = document.getElementById('scannerView');
-  if (gateCard) gateCard.hidden = state.authenticated;
-  if (scannerView) scannerView.hidden = !state.authenticated;
+  if (scannerView) scannerView.hidden = false;
 }
 
 export function renderProgress(label, pct) {

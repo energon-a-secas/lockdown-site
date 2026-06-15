@@ -1,25 +1,11 @@
 // ── Event handlers ───────────────────────────────────────────
 
-import { verifyPassword, runScan } from './data.js';
-import { render, renderProgress, hideProgress, renderResults } from './render.js';
+import { runScan } from './data.js';
+import { renderProgress, hideProgress, renderResults } from './render.js';
 import { normalizeUrl, toast } from './utils.js';
 import { generateReport } from './report.js';
 
 export function bindEvents(state) {
-  // Password gate
-  const gateSubmit = document.getElementById('gateSubmit');
-  const gatePassword = document.getElementById('gatePassword');
-  const gateError = document.getElementById('gateError');
-
-  if (gateSubmit) {
-    gateSubmit.addEventListener('click', () => handleGate(state, gatePassword, gateError));
-  }
-  if (gatePassword) {
-    gatePassword.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleGate(state, gatePassword, gateError);
-    });
-  }
-
   // Scan button
   const scanBtn = document.getElementById('scanBtn');
   const targetUrl = document.getElementById('targetUrl');
@@ -63,27 +49,6 @@ export function bindEvents(state) {
   }
 }
 
-async function handleGate(state, input, errorEl) {
-  const pw = input.value.trim();
-  if (!pw) {
-    errorEl.textContent = 'Enter a password';
-    return;
-  }
-  errorEl.textContent = '';
-  try {
-    const ok = await verifyPassword(pw);
-    if (ok) {
-      state.authenticated = true;
-      state._password = pw;
-      render(state);
-    } else {
-      errorEl.textContent = 'Invalid password';
-    }
-  } catch (e) {
-    errorEl.textContent = e.message || 'Connection error';
-  }
-}
-
 async function handleScan(state) {
   const input = document.getElementById('targetUrl');
   const errorEl = document.getElementById('scanError');
@@ -114,7 +79,7 @@ async function handleScan(state) {
       ? fuzzInput.value.split(',').map(p => p.trim()).filter(Boolean)
       : null;
 
-    const results = await runScan(url, state._password, (label, pct) => {
+    const results = await runScan(url, (label, pct) => {
       renderProgress(label, pct);
     }, fuzzBasePaths);
 

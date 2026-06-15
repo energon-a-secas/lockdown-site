@@ -3,18 +3,6 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
-// ── Password check ──────────────────────────────────────────
-
-function checkPassword(password: string): boolean {
-  const expected = process.env.LOCKDOWN_PASSWORD;
-  if (!expected) throw new Error("LOCKDOWN_PASSWORD not configured");
-  return password === expected;
-}
-
-function requireAuth(password: string) {
-  if (!checkPassword(password)) throw new Error("Unauthorized");
-}
-
 // ── Request log ─────────────────────────────────────────────
 
 interface RequestLog {
@@ -97,15 +85,6 @@ interface ScanResult {
   requests: RequestLog[];
 }
 
-// ── Verify password action ──────────────────────────────────
-
-export const verifyPassword = action({
-  args: { password: v.string() },
-  handler: async (_, { password }): Promise<boolean> => {
-    return checkPassword(password);
-  },
-});
-
 // ── Probe exposed files ─────────────────────────────────────
 
 // Three tiers:
@@ -162,9 +141,8 @@ const TIER_HARDENING = {
 };
 
 export const probeFiles = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
 
@@ -237,9 +215,8 @@ const REQUIRED_HEADERS: { name: string; label: string; hardening: string }[] = [
 ];
 
 export const checkHeaders = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
 
@@ -293,9 +270,8 @@ export const checkHeaders = action({
 // ── Check robots.txt and sitemap ────────────────────────────
 
 export const checkRobots = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
 
@@ -361,9 +337,8 @@ export const checkRobots = action({
 // ── Check SEO basics ────────────────────────────────────────
 
 export const checkSeo = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
 
@@ -480,9 +455,8 @@ const API_PATHS = [
 ];
 
 export const probeEndpoints = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
     const discovered: string[] = [];
@@ -531,9 +505,8 @@ export const probeEndpoints = action({
 // ── Check information leakage ───────────────────────────────
 
 export const checkLeakage = action({
-  args: { targetUrl: v.string(), password: v.string() },
-  handler: async (_, { targetUrl, password }): Promise<ScanResult> => {
-    requireAuth(password);
+  args: { targetUrl: v.string() },
+  handler: async (_, { targetUrl }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
 
@@ -646,11 +619,9 @@ const SENSITIVE_KEYWORDS = [
 export const fuzzEndpoints = action({
   args: {
     targetUrl: v.string(),
-    password: v.string(),
     basePaths: v.array(v.string()),
   },
-  handler: async (_, { targetUrl, password, basePaths }): Promise<ScanResult> => {
-    requireAuth(password);
+  handler: async (_, { targetUrl, basePaths }): Promise<ScanResult> => {
     resetLog();
     const findings: Finding[] = [];
     const base = targetUrl.replace(/\/+$/, "");

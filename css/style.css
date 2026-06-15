@@ -94,44 +94,6 @@ body {
   animation: fadeIn 0.3s ease-out both;
 }
 
-/* ── Gate card ─────────────────────────────────────────────── */
-.gate-card {
-  max-width: 420px;
-  margin: 80px auto 0;
-  text-align: center;
-}
-.gate-icon {
-  color: var(--scan-accent);
-  margin-bottom: var(--space-4);
-}
-.gate-text {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  margin-bottom: var(--space-6);
-}
-.gate-form {
-  display: flex;
-  gap: var(--space-2);
-}
-.gate-form input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-family: var(--font);
-}
-.gate-form input:focus { border-color: var(--scan-accent); }
-.gate-form input:focus:not(:focus-visible) { outline: none; }
-.gate-error {
-  color: var(--severity-critical);
-  font-size: var(--text-xs);
-  margin-top: var(--space-2);
-  min-height: 1.2em;
-}
-
 /* ── Buttons ───────────────────────────────────────────────── */
 .btn {
   padding: 10px 20px;
@@ -620,8 +582,6 @@ details[open] > .netlog-title .group-chevron {
 @media (max-width: 600px) {
   .header-bar { padding: 0 var(--space-4); }
   .container { padding: var(--space-4); }
-  .gate-card { margin-top: 40px; }
-  .gate-form { flex-direction: column; }
   .url-row { flex-direction: column; }
   .results-header { flex-direction: column; align-items: flex-start; }
   .category-tabs { gap: var(--space-1); }

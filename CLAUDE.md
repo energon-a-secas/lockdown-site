@@ -14,7 +14,7 @@ Scan websites for exposed endpoints, missing headers, open files, and SEO gaps. 
 
 Standard modular layout: `index.html` shell + `css/style.css` + `js/*.js`. Backend in `convex/scanner.ts`.
 
-**Password gate:** Site requires a password before scanning. The password is stored as a Convex environment variable `LOCKDOWN_PASSWORD`. Every Convex action validates it before executing.
+**Open access:** No password gate. The scanner is publicly usable; every Convex action runs without authentication. (Previously gated behind `LOCKDOWN_PASSWORD`; the gate and the `verifyPassword` action were removed.)
 
 **Scan flow:** Frontend calls 6 Convex actions sequentially, updating a progress bar between each. Each action makes HTTP requests to the target URL from Convex's server-side runtime (no CORS issues). Results are assembled client-side and rendered as categorized findings.
 
@@ -41,10 +41,10 @@ Standard modular layout: `index.html` shell + `css/style.css` + `js/*.js`. Backe
 | `js/state.js` | Ephemeral state (auth, scan progress, results) |
 | `js/data.js` | Convex client, scan orchestration |
 | `js/render.js` | DOM rendering, results display |
-| `js/events.js` | Event handlers (gate, scan, tabs, download) |
+| `js/events.js` | Event handlers (scan, tabs, download) |
 | `js/report.js` | Markdown report generator |
 | `js/utils.js` | escHtml, toast, normalizeUrl |
-| `convex/scanner.ts` | All 6 scan actions + password verification |
+| `convex/scanner.ts` | All 6 scan actions |
 | `convex/schema.ts` | Empty schema (stateless) |
 
 ## Adding a New Scan Check

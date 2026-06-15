@@ -66,8 +66,6 @@ npm install
 make convex   # or: npx convex dev
 ```
 
-Set the `LOCKDOWN_PASSWORD` environment variable in the Convex dashboard.
-
 ---
 
 ## Architecture
@@ -76,7 +74,7 @@ Set the `LOCKDOWN_PASSWORD` environment variable in the Convex dashboard.
 
 ```
 lockdown-site/
-├── index.html              # App shell with password gate + scanner UI
+├── index.html              # App shell with scanner UI
 ├── css/
 │   └── style.css           # All styles, severity colors, progress bar
 ├── js/

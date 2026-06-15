@@ -24,18 +24,13 @@ function getClient() {
   return client;
 }
 
-export async function verifyPassword(password) {
-  const c = getClient();
-  return await c.action('scanner:verifyPassword', { password });
-}
-
-export async function runScan(targetUrl, password, onProgress, fuzzBasePaths) {
+export async function runScan(targetUrl, onProgress, fuzzBasePaths) {
   const c = getClient();
   const allRequests = [];
 
   async function runAction(name, label, pct) {
     onProgress(label, pct);
-    const result = await c.action(`scanner:${name}`, { targetUrl, password });
+    const result = await c.action(`scanner:${name}`, { targetUrl });
     if (result.requests) allRequests.push(...result.requests);
     return result.findings;
   }
@@ -51,7 +46,7 @@ export async function runScan(targetUrl, password, onProgress, fuzzBasePaths) {
   const paths = fuzzBasePaths && fuzzBasePaths.length ? fuzzBasePaths : ['/api', '/api/v1', '/api/v2'];
   onProgress(`Fuzzing ${paths.length} base paths...`, 88);
   const fuzzResult = await c.action('scanner:fuzzEndpoints', {
-    targetUrl, password, basePaths: paths,
+    targetUrl, basePaths: paths,
   });
   if (fuzzResult.requests) allRequests.push(...fuzzResult.requests);
   const fuzz = fuzzResult.findings;
