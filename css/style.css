@@ -123,10 +123,8 @@ body {
   font-size: var(--text-sm);
   font-family: var(--font);
 }
-.gate-form input:focus {
-  outline: none;
-  border-color: var(--scan-accent);
-}
+.gate-form input:focus { border-color: var(--scan-accent); }
+.gate-form input:focus:not(:focus-visible) { outline: none; }
 .gate-error {
   color: var(--severity-critical);
   font-size: var(--text-xs);
@@ -194,10 +192,8 @@ body {
   font-size: var(--text-base);
   font-family: var(--font);
 }
-.url-row input:focus {
-  outline: none;
-  border-color: var(--scan-accent);
-}
+.url-row input:focus { border-color: var(--scan-accent); }
+.url-row input:focus:not(:focus-visible) { outline: none; }
 .scan-error {
   color: var(--severity-critical);
   font-size: var(--text-xs);
@@ -227,10 +223,8 @@ body {
   font-size: var(--text-sm);
   font-family: var(--font);
 }
-.fuzz-paths-toggle input:focus {
-  outline: none;
-  border-color: var(--scan-accent);
-}
+.fuzz-paths-toggle input:focus { border-color: var(--scan-accent); }
+.fuzz-paths-toggle input:focus:not(:focus-visible) { outline: none; }
 .fuzz-hint {
   font-size: var(--text-xs);
   color: var(--text-muted);
