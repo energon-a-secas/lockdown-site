@@ -6,6 +6,16 @@ let ConvexHttpClient = null;
 
 const CONVEX_URL = 'https://dutiful-elephant-373.convex.cloud';
 
+// Sent with every scan action; the deployment refuses calls without it.
+//
+// This is a speed bump, not authentication — it ships in public JS, so anyone
+// reading this file can extract it. What it buys is that the scan endpoint is
+// not usable by pointing a script at the deployment URL alone, and it can be
+// rotated (`npx convex env set SCAN_SECRET <new>` + change here) if abused.
+// The controls that actually bound the damage are server-side: the SSRF guard
+// in convex/lib/guard.ts and the per-caller rate limit.
+const SCAN_SECRET = 'lockdown-web-v1';
+
 export async function initConvex() {
   if (client) return;
   try {
@@ -30,7 +40,7 @@ export async function runScan(targetUrl, onProgress, fuzzBasePaths) {
 
   async function runAction(name, label, pct) {
     onProgress(label, pct);
-    const result = await c.action(`scanner:${name}`, { targetUrl });
+    const result = await c.action(`scanner:${name}`, { targetUrl, scanSecret: SCAN_SECRET });
     if (result.requests) allRequests.push(...result.requests);
     return result.findings;
   }
@@ -46,7 +56,7 @@ export async function runScan(targetUrl, onProgress, fuzzBasePaths) {
   const paths = fuzzBasePaths && fuzzBasePaths.length ? fuzzBasePaths : ['/api', '/api/v1', '/api/v2'];
   onProgress(`Fuzzing ${paths.length} base paths...`, 88);
   const fuzzResult = await c.action('scanner:fuzzEndpoints', {
-    targetUrl, basePaths: paths,
+    targetUrl, basePaths: paths, scanSecret: SCAN_SECRET,
   });
   if (fuzzResult.requests) allRequests.push(...fuzzResult.requests);
   const fuzz = fuzzResult.findings;

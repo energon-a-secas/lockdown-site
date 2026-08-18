@@ -9,6 +9,7 @@ help:
 	@echo "  make serve    Start dev server → http://localhost:$(PORT)"
 	@echo "  make kill     Kill this project's HTTP server"
 	@echo "  make convex   Run Convex backend"
+	@echo "  make test     Run the scanner guard tests"
 	@echo ""
 
 # ── Dev server ────────────────────────────────────────────────────────────────
@@ -26,3 +27,8 @@ kill:
 .PHONY: convex
 convex:
 	@npx convex dev
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+.PHONY: test
+test:
+	@node --experimental-strip-types tests/guard.test.ts

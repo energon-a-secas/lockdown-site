@@ -1,7 +1,38 @@
 "use node";
 
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { assertScannableUrl, assertScanSecret, ScanRejected } from "./lib/guard";
+
+// ── Entry guard ─────────────────────────────────────────────
+
+/**
+ * Every public action starts here. Without it these actions are an open
+ * proxy: the deployment URL is public, so anyone could aim the scanner at
+ * a third party, or at hosts only reachable from inside the runtime.
+ */
+async function guardScan(
+  ctx: { runMutation: (ref: any, args: any) => Promise<any> },
+  targetUrl: string,
+  scanSecret: string | undefined,
+): Promise<void> {
+  assertScanSecret(scanSecret, process.env.SCAN_SECRET);
+  const url = assertScannableUrl(targetUrl);
+
+  // Convex actions cannot see the caller's IP, so a true per-IP limit is not
+  // available. Bounding by target host caps how hard one third party can be
+  // hit through this deployment; the global bucket caps total quota burn.
+  for (const key of [`host:${url.hostname}`, "global"]) {
+    const verdict = await ctx.runMutation(internal.rateLimit.recordAndCheck, { caller: key });
+    if (!verdict.allowed) {
+      throw new ScanRejected(
+        `Rate limit reached for ${key === "global" ? "this scanner" : url.hostname}: ` +
+        `${verdict.max} scans per ${Math.round(verdict.windowMs / 60000)} minutes. Try again shortly.`,
+      );
+    }
+  }
+}
 
 // ── Request log ─────────────────────────────────────────────
 
@@ -14,6 +45,9 @@ interface RequestLog {
 }
 
 const requestLog: RequestLog[] = [];
+
+/** Redirect hops followed before giving up. Each hop is re-validated. */
+const MAX_REDIRECTS = 5;
 
 function resetLog() {
   requestLog.length = 0;
@@ -39,15 +73,27 @@ async function safeFetch(url: string, options?: RequestInit): Promise<FetchResul
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Lockdown-Scanner/1.0 (security audit tool; +https://lockdown.neorgon.com)",
-        ...((options?.headers as Record<string, string>) || {}),
-      },
-    });
+    // Redirects are followed by hand so every hop is re-validated. With
+    // redirect:"follow" a public URL that 302s to 169.254.169.254 would
+    // reach instance metadata despite the entry guard passing.
+    let current = url;
+    let res: Response;
+    for (let hop = 0; ; hop++) {
+      assertScannableUrl(current);
+      res = await fetch(current, {
+        ...options,
+        signal: controller.signal,
+        redirect: "manual",
+        headers: {
+          "User-Agent": "Lockdown-Scanner/1.0 (security audit tool; +https://lockdown.neorgon.com)",
+          ...((options?.headers as Record<string, string>) || {}),
+        },
+      });
+      const location = res.headers.get("location");
+      if (res.status < 300 || res.status >= 400 || !location) break;
+      if (hop >= MAX_REDIRECTS) break;
+      current = new URL(location, current).toString();
+    }
     clearTimeout(timeout);
     const body = await res.text();
     const headers: Record<string, string> = {};
@@ -141,8 +187,9 @@ const TIER_HARDENING = {
 };
 
 export const probeFiles = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
 
@@ -215,8 +262,9 @@ const REQUIRED_HEADERS: { name: string; label: string; hardening: string }[] = [
 ];
 
 export const checkHeaders = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
 
@@ -270,8 +318,9 @@ export const checkHeaders = action({
 // ── Check robots.txt and sitemap ────────────────────────────
 
 export const checkRobots = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
 
@@ -337,8 +386,9 @@ export const checkRobots = action({
 // ── Check SEO basics ────────────────────────────────────────
 
 export const checkSeo = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
 
@@ -455,8 +505,9 @@ const API_PATHS = [
 ];
 
 export const probeEndpoints = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
     const discovered: string[] = [];
@@ -505,8 +556,9 @@ export const probeEndpoints = action({
 // ── Check information leakage ───────────────────────────────
 
 export const checkLeakage = action({
-  args: { targetUrl: v.string() },
-  handler: async (_, { targetUrl }): Promise<ScanResult> => {
+  args: { targetUrl: v.string(), scanSecret: v.string() },
+  handler: async (ctx, { targetUrl, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
 
@@ -620,8 +672,10 @@ export const fuzzEndpoints = action({
   args: {
     targetUrl: v.string(),
     basePaths: v.array(v.string()),
+    scanSecret: v.string(),
   },
-  handler: async (_, { targetUrl, basePaths }): Promise<ScanResult> => {
+  handler: async (ctx, { targetUrl, basePaths, scanSecret }): Promise<ScanResult> => {
+    await guardScan(ctx, targetUrl, scanSecret);
     resetLog();
     const findings: Finding[] = [];
     const base = targetUrl.replace(/\/+$/, "");
@@ -649,7 +703,7 @@ export const fuzzEndpoints = action({
       const batch = urlsToProbe.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(async (url) => {
-          const res = await safeFetch(url, { method: "GET", redirect: "follow" });
+          const res = await safeFetch(url, { method: "GET" });
           if (!res) return null;
           const bodyText = res.body.substring(0, 2000);
           const hasSensitive = SENSITIVE_KEYWORDS.some(kw =>
