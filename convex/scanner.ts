@@ -201,7 +201,7 @@ export const probeFiles = action({
           severity: file.tier,
           title: `${file.label} is publicly accessible`,
           endpoint: file.path,
-          detail: `HTTP ${res.status} — ${file.tier === "info" ? "discoverable file" : "should not be publicly reachable"}`,
+          detail: `HTTP ${res.status}, ${file.tier === "info" ? "discoverable file" : "should not be publicly reachable"}`,
           hardening: TIER_HARDENING[file.tier](file.path),
         });
       }

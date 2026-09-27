@@ -11,20 +11,20 @@ let pass = 0, fail = 0;
 function rejects(label: string, fn: () => unknown) {
   try {
     fn();
-    console.log(`  FAIL  ${label} — was ALLOWED but must be rejected`);
+    console.log(`  FAIL  ${label}: was ALLOWED but must be rejected`);
     fail++;
   } catch (e) {
     if (e instanceof ScanRejected) { console.log(`  ok    ${label}`); pass++; }
-    else { console.log(`  FAIL  ${label} — wrong error: ${e}`); fail++; }
+    else { console.log(`  FAIL  ${label}: wrong error: ${e}`); fail++; }
   }
 }
 
 function allows(label: string, fn: () => unknown) {
   try { fn(); console.log(`  ok    ${label}`); pass++; }
-  catch (e) { console.log(`  FAIL  ${label} — was REJECTED: ${(e as Error).message}`); fail++; }
+  catch (e) { console.log(`  FAIL  ${label}: was REJECTED: ${(e as Error).message}`); fail++; }
 }
 
-console.log("\nSSRF — private and reserved space must be refused");
+console.log("\nSSRF: private and reserved space must be refused");
 rejects("loopback by name",        () => assertScannableUrl("http://localhost/"));
 rejects("loopback 127.0.0.1",      () => assertScannableUrl("http://127.0.0.1:8080/"));
 rejects("loopback 127.255.1.2",    () => assertScannableUrl("http://127.255.1.2/"));
@@ -50,7 +50,7 @@ allows("http with port",           () => assertScannableUrl("http://example.com:
 allows("public IP literal",        () => assertScannableUrl("http://93.184.216.34/"));
 allows("subdomain + path",         () => assertScannableUrl("https://a.b.example.co.uk/p?q=1"));
 
-console.log("\nCredential — must fail closed");
+console.log("\nCredential: must fail closed");
 rejects("secret unset on server",  () => assertScanSecret("anything", undefined));
 rejects("secret unset, none sent", () => assertScanSecret(undefined, undefined));
 rejects("wrong secret",            () => assertScanSecret("guess", "real"));

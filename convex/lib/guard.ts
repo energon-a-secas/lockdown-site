@@ -102,7 +102,7 @@ export function assertScannableUrl(raw: string): URL {
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new ScanRejected(`Unsupported scheme "${url.protocol}" — only http and https are scannable.`);
+    throw new ScanRejected(`Unsupported scheme "${url.protocol}": only http and https are scannable.`);
   }
 
   const host = url.hostname.toLowerCase();
